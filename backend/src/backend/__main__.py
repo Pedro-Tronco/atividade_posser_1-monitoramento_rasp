@@ -7,6 +7,6 @@ from .logger import Logger
 if __name__ == "__main__":
     logger = Logger('backend').get_logger()
     app = make_app(logger=logger)
-    app.listen(8888, address='0.0.0.0')
+    app.listen(8000, address='0.0.0.0')
     logger.info(f'Websocket started')
     tornado.ioloop.IOLoop.current().start()

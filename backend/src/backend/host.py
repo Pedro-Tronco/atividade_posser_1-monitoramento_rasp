@@ -36,7 +36,5 @@ def make_app(logger: Logger):
     return tornado.web.Application(
         [
             (r"/websocket", HostWebSocket, dict(logger=logger)),
-        ],
-        websocket_ping_interval=5,
-        websocket_ping_timeout=5,
+        ]
     )

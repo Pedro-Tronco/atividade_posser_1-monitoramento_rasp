@@ -1,33 +1,76 @@
-# 🍓 Raspberry Pi - Dashboard de Telemetria WebSocket
+# 🍓 Raspberry Pi - Sistema de Monitoramento e Telemetria em Tempo Real
 
-Frontend moderno, responsivo e em tempo real para monitoramento de hardware da Raspberry Pi via WebSocket.
+Sistema *full-stack* containerizado para monitoramento de hardware da Raspberry Pi em tempo real via WebSocket, composto por um **Backend Python (Tornado)** e um **Frontend Web estático** servido pelo **Caddy**.
+
+---
+
+## 🏗️ Arquitetura do Sistema
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Raspberry Pi Host                        │
+│                                                             │
+│  ┌──────────────────────┐        ┌───────────────────────┐  │
+│  │   caddy-frontend     │        │    python-backend     │  │
+│  │   (Caddy Server)     │        │   (Tornado Server)    │  │
+│  │                      │        │                       │  │
+│  │  Servidor Web        │        │  Coleta de Métricas   │  │
+│  │  Porta: 8888         │        │  (/hostfs e /sys)     │  │
+│  │                      │        │  WebSocket: 8000      │  │
+│  └──────────┬───────────┘        └───────────▲───────────┘  │
+└─────────────┼────────────────────────────────┼──────────────┘
+              │                                │
+              ▼                                │
+      ┌───────────────┐                        │
+      │  Navegador    ├────────────────────────┘
+      │  (Dashboard)  │   WebSocket (ws://IP:8000/websocket)
+      └───────────────┘
+```
+
+- **Backend (`python-backend`)**:
+  - Desenvolvido em **Python 3.13** com **Tornado** e gerenciado via **`uv`**.
+  - Roda em modo containerizado privileged (`network_mode: host`) com acesso de leitura ao sistema de arquivos do host (`/hostfs` e `/sys`).
+  - Coleta métricas de CPU, temperatura, memória, armazenamento, uptime, IP e hostname.
+  - Transmite os dados a cada segundo via **WebSocket na porta `8000`** (endpoint `/websocket`).
+
+- **Frontend (`caddy-frontend`)**:
+  - Servido via servidor web **Caddy (`caddy:alpine`)** na **porta `8888`**.
+  - Interface Single Page Application (SPA) construída com **HTML5 semântico, CSS3 Glassmorphic e Vanilla JavaScript**.
+  - Gráficos de histórico em tempo real desenhados em Canvas HTML5.
 
 ---
 
 ## 🚀 Como Executar
 
-### Opção 1: Abrir diretamente no navegador (Mais simples)
-Basta dar **duplo clique** no arquivo [`index.html`](file:///c:/Users/felip/Desktop/TRABALO%20POSSER%20FRONT/index.html) no Windows Explorer ou arrastá-lo para qualquer navegador (Chrome, Edge, Firefox).
+### Pré-requisitos
+- [Docker](https://docs.docker.com/get-docker/) e [Docker Compose](https://docs.docker.com/compose/install/) instalados na Raspberry Pi ou ambiente Linux.
 
-### Opção 2: Servidor Local (Recomendado)
-Se preferir rodar através de um servidor HTTP local:
+### Subir o Sistema Completo
+
+No diretório raiz do projeto, execute:
+
 ```bash
-# Com Python:
-python -m http.server 3000
-
-# Ou com Node.js:
-npx serve .
+docker compose up -d --build
 ```
-E acesse no navegador: `http://localhost:3000`
+
+Os serviços serão iniciados em segundo plano:
+- **Dashboard (Frontend)**: Acesse no navegador em `http://<IP_DA_RASPBERRY>:8888` ou `http://localhost:8888`.
+- **WebSocket (Backend)**: Disponível em `ws://<IP_DA_RASPBERRY>:8000/websocket`.
+
+### Parar os Serviços
+
+```bash
+docker compose down
+```
 
 ---
 
-## 📡 Configuração do WebSocket
+## 📡 Configuração e Payload WebSocket
 
 - **Endereço Padrão**: `ws://10.1.25.105:8000/websocket`
-- **Alteração Dinâmica**: Você pode alterar o IP e a porta diretamente na interface clicando no ícone de engrenagem ⚙️ no cabeçalho e clicando em **Reconectar**. O novo endereço é salvo no `localStorage` do seu navegador.
+- **Ajuste Dinâmico**: É possível alterar o IP e a porta de conexão diretamente na interface do Dashboard clicando no ícone de engrenagem ⚙️ e clicando em **Reconectar**. O endereço digitado é salvo no `localStorage` do navegador.
 
-### Formato do Payload Esperado (a cada segundo):
+### Exemplo de Payload Transmitido (a cada segundo):
 ```json
 {
   "hostname": "raspberrypi",
@@ -35,8 +78,8 @@ E acesse no navegador: `http://localhost:3000`
   "serial_number": "10000000621d3237",
   "local_ip": "10.1.25.84",
   "uptime": "1:03:53.293885",
-  "cpu_usage_percent": 0.0,
-  "cpu_temperature_celsius": 48.199,
+  "cpu_usage_percent": 12.5,
+  "cpu_temperature_celsius": 48.2,
   "memory_usage_percent": 14.3,
   "storage_usage_percent": 43.2
 }
@@ -44,33 +87,35 @@ E acesse no navegador: `http://localhost:3000`
 
 ---
 
-## 🛡️ Tratamento de Quedas e "Raspberry Travada"
+## 🛡️ Camadas de Proteção e Resiliência (Watchdog)
 
-O sistema possui duas camadas de proteção e alerta:
+O Dashboard possui monitoramento ativo da saúde da conexão e da placa:
 
-1. **Reconexão Automática & Queda de Rede**:
-   - Caso o WebSocket seja fechado ou ocorra erro de conexão, a interface entra no estado **Desconectado**, exibe uma faixa de alerta em vermelho e tenta reconectar automaticamente a cada 3 segundos com contagem regressiva em tempo real.
-   - Há também um botão **"Tentar Reconectar Agora"** para forçar nova tentativa imediata.
+1. **Reconexão Automática**:
+   - Se a conexão WebSocket cair, o painel exibe um alerta de desconexão e tenta reconectar automaticamente a cada 3 segundos com contagem regressiva visual.
+   - Há um botão **"Tentar Reconectar Agora"** para forçar nova tentativa imediata.
 
-2. **Watchdog de Inatividade (Detecção de Travamento / Placa "der pau")**:
-   - Se o socket permanecer aberto mas a Raspberry Pi **parar de enviar dados por mais de 3,5 segundos**, o indicador muda para aviso de atraso.
-   - Se passar de **6 segundos** sem novas mensagens, um alerta de travamento crítico é acionado:
+2. **Watchdog de Inatividade (Detecção de Travamento)**:
+   - Se o socket permanecer aberto mas a Raspberry Pi **não enviar dados por mais de 3,5 segundos**, o indicador avisa que os dados estão desatualizados.
+   - Se ultrapassar **6 segundos**, dispara um alerta crítico:
      > *"🚨 Atraso Crítico: A Raspberry Pi não envia dados há mais de 6 segundos. A placa pode ter travado, desligado ou o processo de telemetria caiu."*
 
-3. **Data e Hora da Última Atualização**:
-   - Informa a data e hora exata da última mensagem (`DD/MM/AAAA às HH:mm:ss`).
-   - Tag de tempo relativo contínuo (`Agora mesmo`, `Há 1s`, `Há 2s`...) com destaque visual caso fique desatualizado.
+3. **Modo de Simulação**:
+   - É possível ativar a opção **"Simular Dados"** no canto superior direito para testar o Dashboard com dados simulados sem necessidade da placa física.
 
 ---
 
-## 🧪 Modo de Simulação (Para Testes sem a Raspberry)
+## 📁 Estrutura de Arquivos do Projeto
 
-No canto superior direito, clique no botão **"Simular Dados"**. A interface gerará pacotes de telemetria a cada segundo simulando as métricas e gráficos em tempo real, permitindo testar o dashboard mesmo quando a placa física não estiver acessível.
-
----
-
-## 📁 Estrutura de Arquivos
-
-- [`index.html`](file:///c:/Users/felip/Desktop/TRABALO%20POSSER%20FRONT/index.html): Estrutura semântica HTML5 com cards de telemetria, medidores circulares e painel do sistema.
-- [`style.css`](file:///c:/Users/felip/Desktop/TRABALO%20POSSER%20FRONT/style.css): Estilização moderna com design glassmorphism, modo escuro, efeitos de neon e responsividade.
-- [`app.js`](file:///c:/Users/felip/Desktop/TRABALO%20POSSER%20FRONT/app.js): Lógica de conexão WebSocket, reconexão automática, watchdog, gráficos em Canvas e modo simulação.
+```
+.
+├── Caddyfile              # Configuração do servidor Caddy (porta 8888)
+├── docker-compose.yml     # Orquestração dos containers (Backend + Frontend Caddy)
+├── index.html             # Estrutura HTML do Dashboard
+├── style.css              # Estilos CSS (Glassmorphism, Dark Theme, Animações)
+├── app.js                 # Lógica de WebSocket, Gráficos Canvas e Watchdog
+└── backend/               # Código-fonte do serviço Backend (Python/Tornado)
+    ├── Dockerfile         # Build multi-stage com UV e Python 3.13
+    ├── pyproject.toml     # Dependências do projeto Python
+    └── src/backend/       # Módulos do servidor Tornado e coletores de hardware
+```

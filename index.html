@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raspberry Pi Monitor | Telemetria em Tempo Real</title>
+  <meta name="description" content="Dashboard de monitoramento em tempo real via WebSocket para Raspberry Pi com telemetria de CPU, memória, temperatura e armazenamento.">
+  
+  <!-- Fontes Google -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Efeitos de Fundo Decorativos -->
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+  <div class="grid-overlay"></div>
+
+  <div class="app-container">
+    <!-- Cabeçalho Principal -->
+    <header class="dashboard-header">
+      <div class="header-brand">
+        <div class="brand-icon">
+          <!-- Ícone Raspberry Pi estilizado SVG -->
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="4" width="16" height="16" rx="2"/>
+            <rect x="9" y="9" width="6" height="6"/>
+            <line x1="9" y1="1" x2="9" y2="4"/>
+            <line x1="15" y1="1" x2="15" y2="4"/>
+            <line x1="9" y1="20" x2="9" y2="23"/>
+            <line x1="15" y1="20" x2="15" y2="23"/>
+            <line x1="20" y1="9" x2="23" y2="9"/>
+            <line x1="20" y1="14" x2="23" y2="14"/>
+            <line x1="1" y1="9" x2="4" y2="9"/>
+            <line x1="1" y1="14" x2="4" y2="14"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">Raspberry Pi <span class="accent-text">Telemetria</span></h1>
+          <p class="brand-subtitle" id="device-model-label">Conectando ao dispositivo...</p>
+        </div>
+      </div>
+
+      <!-- Barra de Status do WebSocket -->
+      <div class="connection-pill-wrapper">
+        <div id="connection-status-badge" class="status-badge connecting">
+          <span class="status-dot"></span>
+          <span id="connection-status-text" class="status-text">Conectando...</span>
+        </div>
+
+        <button id="toggle-config-btn" class="btn-icon" title="Configurar Conexão WebSocket" aria-label="Configurar Conexão">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+
+        <button id="toggle-sim-btn" class="btn-secondary" title="Alternar Modo Simulação de Teste">
+          <span class="sim-indicator"></span>
+          <span id="sim-btn-text">Simular Dados</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Barra de Configuração Retrátil -->
+    <section id="config-drawer" class="config-drawer hidden">
+      <div class="config-content">
+        <div class="config-group">
+          <label for="ws-url-input">Endereço do WebSocket:</label>
+          <div class="input-with-actions">
+            <input type="text" id="ws-url-input" value="ws://10.1.25.105:8000/websocket" spellcheck="false" placeholder="ws://ip:porta/websocket">
+            <button id="save-connect-btn" class="btn-primary">Reconectar</button>
+          </div>
+        </div>
+        <div class="config-info">
+          <small>Dica: Caso a Raspberry Pi mude de IP ou porta, atualize acima e clique em Reconectar.</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- Banner de Alerta / Falha / Desconexão (Aparece quando a Rasp der pau ou não responder) -->
+    <aside id="alert-banner" class="alert-banner hidden" role="alert">
+      <div class="alert-icon">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
+      <div class="alert-body">
+        <strong id="alert-title">Atenção na Conexão</strong>
+        <p id="alert-message">Aguardando dados da Raspberry Pi...</p>
+      </div>
+      <div class="alert-actions">
+        <button id="alert-reconnect-btn" class="btn-alert">Tentar Reconectar Agora</button>
+      </div>
+    </aside>
+
+    <!-- Barra de Metadados e Última Atualização -->
+    <section class="telemetry-meta-bar" aria-label="Informações de Atualização">
+      <div class="meta-item">
+        <div class="meta-header-row">
+          <span class="meta-label">ÚLTIMA ATUALIZAÇÃO</span>
+          <span id="last-update-relative" class="relative-time-tag">--</span>
+        </div>
+        <div class="meta-value-group">
+          <span id="last-update-time" class="meta-value font-mono">Aguardando 1º pacote...</span>
+        </div>
+      </div>
+
+      <div class="meta-item">
+        <div class="meta-header-row">
+          <span class="meta-label">TEMPO DE ATIVIDADE</span>
+        </div>
+        <div class="meta-value-group">
+          <span id="device-uptime" class="meta-value font-mono">--:--:--</span>
+        </div>
+      </div>
+
+      <div class="meta-item">
+        <div class="meta-header-row">
+          <span class="meta-label">IP LOCAL</span>
+        </div>
+        <div class="meta-value-group">
+          <span id="device-ip" class="meta-value font-mono">--.---.--.--</span>
+          <button id="copy-ip-btn" class="btn-micro" title="Copiar IP">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="meta-item">
+        <div class="meta-header-row">
+          <span class="meta-label">PACOTES RECEBIDOS</span>
+        </div>
+        <div class="meta-value-group">
+          <span id="packets-counter" class="meta-value font-mono">0 pacotes</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Grid de Métricas Principais -->
+    <main class="metrics-grid">
+      <!-- Card: Uso de CPU -->
+      <article class="metric-card" id="card-cpu-usage">
+        <header class="card-header">
+          <div class="card-title-group">
+            <div class="metric-badge-icon icon-cyan">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="4" y="4" width="16" height="16" rx="2"/>
+                <rect x="9" y="9" width="6" height="6"/>
+                <line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/>
+                <line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/>
+                <line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/>
+                <line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
+              </svg>
+            </div>
+            <div>
+              <h2>Uso da CPU</h2>
+              <span class="card-subtitle">Carga dos núcleos</span>
+            </div>
+          </div>
+          <span id="cpu-load-badge" class="pill-chip chip-normal">Normal</span>
+        </header>
+
+        <div class="card-metric-value-row">
+          <div class="primary-value-container">
+            <span id="cpu-usage-val" class="primary-number font-mono">0.0</span>
+            <span class="unit">%</span>
+          </div>
+          <div class="gauge-ring-box">
+            <svg class="ring-svg" viewBox="0 0 100 100">
+              <circle class="ring-bg" cx="50" cy="50" r="40" />
+              <circle id="cpu-ring-fill" class="ring-fill ring-cyan" cx="50" cy="50" r="40" stroke-dasharray="251.2" stroke-dashoffset="251.2" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Barra de Progresso Rápida -->
+        <div class="progress-bar-track">
+          <div id="cpu-bar-fill" class="progress-bar-fill bar-cyan" style="width: 0%"></div>
+        </div>
+
+        <!-- Gráfico em Tempo Real Histórico -->
+        <div class="chart-wrapper">
+          <div class="chart-legend">
+            <span>Histórico em tempo real (últimos 30s)</span>
+          </div>
+          <canvas id="cpu-chart" height="55"></canvas>
+        </div>
+      </article>
+
+      <!-- Card: Temperatura da CPU -->
+      <article class="metric-card" id="card-cpu-temp">
+        <header class="card-header">
+          <div class="card-title-group">
+            <div class="metric-badge-icon icon-orange">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
+              </svg>
+            </div>
+            <div>
+              <h2>Temperatura CPU</h2>
+              <span class="card-subtitle">Sensor térmico SoC</span>
+            </div>
+          </div>
+          <span id="cpu-temp-badge" class="pill-chip chip-normal">Adequada</span>
+        </header>
+
+        <div class="card-metric-value-row">
+          <div class="primary-value-container">
+            <span id="cpu-temp-val" class="primary-number font-mono">0.0</span>
+            <span class="unit">°C</span>
+          </div>
+          <div class="gauge-ring-box">
+            <svg class="ring-svg" viewBox="0 0 100 100">
+              <circle class="ring-bg" cx="50" cy="50" r="40" />
+              <circle id="temp-ring-fill" class="ring-fill ring-orange" cx="50" cy="50" r="40" stroke-dasharray="251.2" stroke-dashoffset="251.2" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Barra de Progresso Térmica -->
+        <div class="progress-bar-track">
+          <div id="temp-bar-fill" class="progress-bar-fill bar-orange" style="width: 0%"></div>
+        </div>
+
+        <div class="chart-wrapper">
+          <div class="chart-legend">
+            <span>Curva térmica em tempo real</span>
+          </div>
+          <canvas id="temp-chart" height="55"></canvas>
+        </div>
+      </article>
+
+      <!-- Card: Uso de Memória RAM -->
+      <article class="metric-card" id="card-memory-usage">
+        <header class="card-header">
+          <div class="card-title-group">
+            <div class="metric-badge-icon icon-purple">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 19v-3"></path><path d="M10 19v-3"></path><path d="M14 19v-3"></path><path d="M18 19v-3"></path>
+                <rect x="2" y="5" width="20" height="11" rx="2"></rect>
+              </svg>
+            </div>
+            <div>
+              <h2>Memória RAM</h2>
+              <span class="card-subtitle">Utilização da memória</span>
+            </div>
+          </div>
+          <span id="memory-load-badge" class="pill-chip chip-normal">Livre</span>
+        </header>
+
+        <div class="card-metric-value-row">
+          <div class="primary-value-container">
+            <span id="memory-usage-val" class="primary-number font-mono">0.0</span>
+            <span class="unit">%</span>
+          </div>
+          <div class="gauge-ring-box">
+            <svg class="ring-svg" viewBox="0 0 100 100">
+              <circle class="ring-bg" cx="50" cy="50" r="40" />
+              <circle id="mem-ring-fill" class="ring-fill ring-purple" cx="50" cy="50" r="40" stroke-dasharray="251.2" stroke-dashoffset="251.2" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Barra de Progresso de Memória -->
+        <div class="progress-bar-track">
+          <div id="mem-bar-fill" class="progress-bar-fill bar-purple" style="width: 0%"></div>
+        </div>
+
+        <div class="metric-stats-footer">
+          <div class="stat-col">
+            <span class="stat-caption">Status</span>
+            <span id="mem-status-caption" class="stat-highlight">Otimizado</span>
+          </div>
+          <div class="stat-col">
+            <span class="stat-caption">Pressão</span>
+            <span id="mem-pressure-caption" class="stat-highlight">Baixa</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- Card: Armazenamento / Disco -->
+      <article class="metric-card" id="card-storage-usage">
+        <header class="card-header">
+          <div class="card-title-group">
+            <div class="metric-badge-icon icon-emerald">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="12" x2="2" y2="12"></line>
+                <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+                <line x1="6" y1="16" x2="6.01" y2="16"></line>
+                <line x1="10" y1="16" x2="10.01" y2="16"></line>
+              </svg>
+            </div>
+            <div>
+              <h2>Armazenamento</h2>
+              <span class="card-subtitle">MicroSD / SSD principal</span>
+            </div>
+          </div>
+          <span id="storage-load-badge" class="pill-chip chip-normal">Saudável</span>
+        </header>
+
+        <div class="card-metric-value-row">
+          <div class="primary-value-container">
+            <span id="storage-usage-val" class="primary-number font-mono">0.0</span>
+            <span class="unit">%</span>
+          </div>
+          <div class="gauge-ring-box">
+            <svg class="ring-svg" viewBox="0 0 100 100">
+              <circle class="ring-bg" cx="50" cy="50" r="40" />
+              <circle id="storage-ring-fill" class="ring-fill ring-emerald" cx="50" cy="50" r="40" stroke-dasharray="251.2" stroke-dashoffset="251.2" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Barra de Progresso de Armazenamento -->
+        <div class="progress-bar-track">
+          <div id="storage-bar-fill" class="progress-bar-fill bar-emerald" style="width: 0%"></div>
+        </div>
+
+        <div class="metric-stats-footer">
+          <div class="stat-col">
+            <span class="stat-caption">Espaço Livre</span>
+            <span id="storage-free-val" class="stat-highlight">--%</span>
+          </div>
+          <div class="stat-col">
+            <span class="stat-caption">Capacidade</span>
+            <span class="stat-highlight">OK</span>
+          </div>
+        </div>
+      </article>
+    </main>
+
+    <!-- Painel de Detalhes do Hardware & Informações do Sistema -->
+    <section class="device-details-panel">
+      <div class="panel-header">
+        <h3 class="panel-title">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          Informações do Sistema
+        </h3>
+        <span class="panel-tag">Raspberry Pi OS</span>
+      </div>
+
+      <div class="details-grid">
+        <div class="detail-box">
+          <span class="detail-label">Nome da Máquina (Hostname)</span>
+          <span id="device-hostname" class="detail-value font-mono">--</span>
+        </div>
+        <div class="detail-box">
+          <span class="detail-label">Modelo de Hardware</span>
+          <span id="device-model-full" class="detail-value">--</span>
+        </div>
+        <div class="detail-box">
+          <span class="detail-label">Número de Série</span>
+          <div class="detail-with-copy">
+            <span id="device-serial" class="detail-value font-mono">--</span>
+            <button id="copy-serial-btn" class="btn-micro" title="Copiar Serial">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="detail-box">
+          <span class="detail-label">Endereço de Conexão WebSocket</span>
+          <span id="active-ws-url" class="detail-value font-mono">ws://10.1.25.105:8000/websocket</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Rodapé -->
+    <footer class="dashboard-footer">
+      <div class="footer-left">
+        <span>Monitor de Telemetria de Hardware</span>
+        <span class="separator">•</span>
+        <span id="reconnect-counter-text">Reconexão automática ativa</span>
+      </div>
+      <div class="footer-right">
+        <span id="watchdog-indicator" class="watchdog-ok">Watchdog Ativo (3s)</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Toast de Notificação -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -5,7 +5,11 @@ services:
       dockerfile: Dockerfile
     container_name: python-backend
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    network_mode: host
+    pid: host
+    privileged: true
+    volumes:
+      - /:/hostfs:ro
+      - /sys:/sys:ro
     environment:
       - PORT=8000

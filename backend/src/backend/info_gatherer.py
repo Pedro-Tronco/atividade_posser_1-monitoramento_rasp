@@ -20,7 +20,7 @@ def _get_local_ip() -> str | None:
 
 
 def _get_raspberry_model() -> str:
-    model_path = Path("/proc/device-tree/model")
+    model_path = Path("/sys/firmware/devicetree/base/model")
 
     try:
         return model_path.read_text().rstrip("\x00\n")
@@ -68,7 +68,7 @@ def get_raspberry_pi_info() -> RaspberryPiInfo:
         cpu_usage_percent=psutil.cpu_percent(interval=0.5),
         cpu_temperature_celsius=_get_cpu_temperature(),
         memory_usage_percent=psutil.virtual_memory().percent,
-        storage_usage_percent=psutil.disk_usage("/").percent,
+        storage_usage_percent=psutil.disk_usage("/hostfs").percent,
     )
 
 

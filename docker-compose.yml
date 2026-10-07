@@ -13,3 +13,13 @@ services:
       - /sys:/sys:ro
     environment:
       - PORT=8000
+
+  frontend:
+    image: caddy:alpine
+    container_name: caddy-frontend
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - .:/usr/share/caddy
